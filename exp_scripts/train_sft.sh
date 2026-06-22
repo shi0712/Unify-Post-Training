@@ -28,7 +28,7 @@ cd $ROOT/hpt/verl/
 mkdir -p $ROOT/checkpoints/$EXP_NAME
 
 TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/openr1.parquet"}
-TEST_FILE=${TEST_FILE:-["${DATA_DIR}/AIME24/test.parquet","${DATA_DIR}/AMC23/test.parquet","${DATA_DIR}/MATH-500/test.parquet"]}
+TEST_FILE=${TEST_FILE:-["${DATA_DIR}/AIME24/test.parquet","${DATA_DIR}/AIME25/test.parquet","${DATA_DIR}/AMC23/test.parquet","${DATA_DIR}/MATH-500/test.parquet","${DATA_DIR}/Minerva/test.parquet","${DATA_DIR}/Olympiad-Bench/test.parquet"]}
 
 python3 -m verl.trainer.fsdp_sft_trainer \
     data.train_files=$TRAIN_FILE \
