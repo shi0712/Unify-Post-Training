@@ -14,24 +14,26 @@ source activate uft
 # NOTE: change to your root dir
 ROOT=../Unify-Post-Training
 
+export SWANLAB_API_KEY='16xw3bqnlqJYli0MXham3'
+export SWANLAB_DESCRIPTION='SFT with phi-function per-token probability weighting'
 export WANDB_PROJECT="unified-ft"
 
-LR=1e-5
-MODEL=Qwen2.5-Math-7B
+LR=1e-6
+MODEL=Qwen2.5-Math-1.5B
 EXP_NAME="${DATE}_sft-dft_${MODEL}_lr@${LR}_${TIME_TAG}"
-MODEL_PATH=/fs-computility/prime/zuoyuxin/llms/$MODEL
+MODEL_PATH=$ROOT/models/$MODEL
 DATA_DIR=$ROOT/data/
 
 cd $ROOT/hpt/verl/
 mkdir -p $ROOT/checkpoints/$EXP_NAME
 
 TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/openr1.parquet"}
-TEST_FILE=${TEST_FILE:-"${DATA_DIR}/AIME24/test.parquet"}
+TEST_FILE=${TEST_FILE:-["${DATA_DIR}/AIME24/test.parquet","${DATA_DIR}/AMC23/test.parquet","${DATA_DIR}/MATH-500/test.parquet"]}
 
 python3 -m verl.trainer.fsdp_dft_trainer \
     data.train_files=$TRAIN_FILE \
     data.val_files=$TEST_FILE \
-    data.train_batch_size=256 \
+    data.train_batch_size=128 \
     data.micro_batch_size=16 \
     data.max_length=1024 \
     data.truncation=error \
@@ -50,5 +52,5 @@ python3 -m verl.trainer.fsdp_dft_trainer \
     trainer.total_training_steps=500 \
     trainer.project_name="$WANDB_PROJECT" \
     trainer.experiment_name="$EXP_NAME" \
-    trainer.logger="['console','wandb']" \
+    trainer.logger="['console','swanlab']" \
     trainer.default_local_dir=$ROOT/checkpoints/$EXP_NAME

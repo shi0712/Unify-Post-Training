@@ -59,10 +59,12 @@ class Tracking(object):
             SWANLAB_API_KEY = os.environ.get("SWANLAB_API_KEY", None)
             SWANLAB_LOG_DIR = os.environ.get("SWANLAB_LOG_DIR", "swanlog")
             SWANLAB_MODE = os.environ.get("SWANLAB_MODE", "cloud")
+            SWANLAB_DESCRIPTION = os.environ.get("SWANLAB_DESCRIPTION", None)
             if SWANLAB_API_KEY:
                 swanlab.login(SWANLAB_API_KEY)  # NOTE: previous login information will be overwritten
             swanlab.init(project=project_name,
                          experiment_name=experiment_name,
+                         description=SWANLAB_DESCRIPTION,
                          config={
                              "FRAMEWORK": "veRL",
                              **config

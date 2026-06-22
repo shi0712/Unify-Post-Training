@@ -19,18 +19,19 @@ source activate uft
 ROOT=../Unify-Post-Training
 
 export SWANLAB_API_KEY='16xw3bqnlqJYli0MXham3'
-export SWANLAB_DESCRIPTION='HPT switch strategy on LLaMA model'
+export SWANLAB_DESCRIPTION='HPT switch strategy with GRPO + SFT mixing'
 export WANDB_PROJECT="unified-ft"
 
 UNIFY_STRATEGY="switch"
-SWITCH_GATE=2
-SWITCH_GATE_OFF=2
+SWITCH_GATE=0
+SWITCH_GATE_OFF=0
 OFFLINE_LOSS_TYPE="sft"
-SFT_LOSS_COEF=1.0
+SFT_LOSS_COEF=0.3 # 0.3 for Qwen2.5-Math-1.5B
 REMOVE_SFTED_DATA=False
+MAX_GRAD_NORM=80.0
 
 LR=5e-6
-MODEL=Llama-3.1-8B
+MODEL=Qwen2.5-Math-1.5B # Following LUFFY, rope_theta should be reset to 40000 and max_position_embeddings to 16384 
 EXP_NAME="${DATE}_${UNIFY_STRATEGY}-${OFFLINE_LOSS_TYPE}-${SFT_LOSS_COEF}_${MODEL}_gate@${SWITCH_GATE}_lr@${LR}_${TIME_TAG}"
 MODEL_PATH=$ROOT/models/$MODEL
 DATA_DIR=$ROOT/data/
@@ -49,9 +50,6 @@ python3 -m verl.mix_src.main_mix_ppo \
     data.val_batch_size=512 \
     data.max_prompt_length=1024 \
     data.max_response_length=8192 \
-    +data.zero=True \
-    +data.zero_temp=$'"Question:\n{prompt}\nAnswer:\nLet\'s think step by step."' \
-    +data.suffix_prompt=$'"\nPlease reason step by step, and put your final answer within \\boxed{}."' \
     actor_rollout_ref.model.path=$MODEL_PATH \
     actor_rollout_ref.actor.optim.lr=$LR \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -66,6 +64,7 @@ python3 -m verl.mix_src.main_mix_ppo \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.grad_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
+    +actor_rollout_ref.actor.max_grad_norm=$MAX_GRAD_NORM \
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.temperature=1.0 \

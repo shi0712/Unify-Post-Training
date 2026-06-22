@@ -18,7 +18,8 @@ source activate uft
 # NOTE: change to your root dir
 ROOT=../Unify-Post-Training
 
-# export SWANLAB_API_KEY='xxx'
+export SWANLAB_API_KEY='16xw3bqnlqJYli0MXham3'
+export SWANLAB_DESCRIPTION='SRFT baseline: entropy-weighted SFT + RL mixing'
 export WANDB_PROJECT="unified-ft"
 
 UNIFY_STRATEGY="no"
@@ -27,9 +28,9 @@ SWITCH_GATE_OFF=0
 OFFLINE_LOSS_TYPE="srft"
 
 LR=1e-6
-MODEL=Qwen2.5-Math-7B
+MODEL=Qwen2.5-Math-1.5B
 EXP_NAME="${DATE}_${UNIFY_STRATEGY}-${OFFLINE_LOSS_TYPE}_${MODEL}_lr@${LR}_${TIME_TAG}"
-MODEL_PATH=/fs-computility/prime/zuoyuxin/llms/$MODEL
+MODEL_PATH=$ROOT/models/$MODEL
 DATA_DIR=$ROOT/data/
 
 cd $ROOT/hpt/verl/
@@ -87,6 +88,7 @@ python3 -m verl.mix_src.main_mix_ppo \
     trainer.switch_gate="$SWITCH_GATE" \
     trainer.switch_gate_off=$SWITCH_GATE_OFF \
     actor_rollout_ref.actor.offline_loss_type="$OFFLINE_LOSS_TYPE" \
+    actor_rollout_ref.actor.enable_phi_function=False \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.use_sft_prefix_reward=False \
     actor_rollout_ref.rollout.prefix_share_across_samples=False \

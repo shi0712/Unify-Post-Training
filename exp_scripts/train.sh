@@ -18,21 +18,22 @@ source activate uft
 # NOTE: change to your root dir
 ROOT=../Unify-Post-Training
 
-# export SWANLAB_API_KEY='xxx' 
+export SWANLAB_API_KEY='16xw3bqnlqJYli0MXham3'
+export SWANLAB_DESCRIPTION='HPT switch strategy with GRPO + SFT mixing'
 export WANDB_PROJECT="unified-ft"
 
 UNIFY_STRATEGY="switch"
 SWITCH_GATE=0
 SWITCH_GATE_OFF=0
 OFFLINE_LOSS_TYPE="sft"
-SFT_LOSS_COEF=1.0 # 0.3 for Qwen2.5-Math-1.5B
+SFT_LOSS_COEF=0.3 # 0.3 for Qwen2.5-Math-1.5B
 REMOVE_SFTED_DATA=False
 MAX_GRAD_NORM=80.0
 
 LR=5e-6
-MODEL=Qwen2.5-Math-7B # Following LUFFY, rope_theta should be reset to 40000 and max_position_embeddings to 16384 
+MODEL=Qwen2.5-Math-1.5B # Following LUFFY, rope_theta should be reset to 40000 and max_position_embeddings to 16384 
 EXP_NAME="${DATE}_${UNIFY_STRATEGY}-${OFFLINE_LOSS_TYPE}-${SFT_LOSS_COEF}_${MODEL}_gate@${SWITCH_GATE}_lr@${LR}_${TIME_TAG}"
-MODEL_PATH=/fs-computility/prime/zuoyuxin/llms/$MODEL
+MODEL_PATH=$ROOT/models/$MODEL
 DATA_DIR=$ROOT/data/
 
 cd $ROOT/hpt/verl/
@@ -101,6 +102,7 @@ python3 -m verl.mix_src.main_mix_ppo \
     actor_rollout_ref.rollout.prefix_reward_weight_alpha=1.0 \
     actor_rollout_ref.ref.use_ref=False \
     actor_rollout_ref.actor.sft_loss_coef=$SFT_LOSS_COEF \
+    actor_rollout_ref.actor.enable_phi_function=False \
     actor_rollout_ref.actor.off_policy_normalize=False \
     actor_rollout_ref.actor.off_policy_reshape="p_div_p_0.1" \
     actor_rollout_ref.actor.off_policy_loss_impl=token \
