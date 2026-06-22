@@ -139,8 +139,9 @@ class MIXDataParallelPPOActor(DataParallelPPOActor):
                         off_policy_eos_mask = response_mask[off_policy_mask]
                         
                         sft_loss = compute_sft_pure_loss(log_prob=off_policy_logprob,
-                                                        eos_mask=off_policy_eos_mask)
-                        
+                                                        eos_mask=off_policy_eos_mask,
+                                                        enable_phi_function=self.config.enable_phi_function)
+
                         on_policy_mask = ~off_policy_mask
                         on_policy_logprob = log_prob[on_policy_mask]
                         on_policy_old_logprob = old_log_prob[on_policy_mask]
@@ -221,8 +222,9 @@ class MIXDataParallelPPOActor(DataParallelPPOActor):
                         off_policy_eos_mask = response_mask[off_policy_mask]
                         
                         sft_loss = compute_sft_pure_loss(log_prob=off_policy_logprob,
-                                                        eos_mask=off_policy_eos_mask)
-                        
+                                                        eos_mask=off_policy_eos_mask,
+                                                        enable_phi_function=self.config.enable_phi_function)
+
                         from .mix_core_alg import compute_token_on_off_policy_loss_weight
                         loss_fn = compute_token_on_off_policy_loss_weight
 
@@ -288,8 +290,9 @@ class MIXDataParallelPPOActor(DataParallelPPOActor):
                         sft_eos_mask = response_mask[sft_mask]
                         
                         sft_loss = compute_sft_pure_loss(log_prob=sft_logprob,
-                                                        eos_mask=sft_eos_mask)
-                        
+                                                        eos_mask=sft_eos_mask,
+                                                        enable_phi_function=self.config.enable_phi_function)
+
 
                         from .mix_core_alg import compute_token_on_off_policy_mask_loss
                         loss_fn = compute_token_on_off_policy_mask_loss
@@ -359,8 +362,9 @@ class MIXDataParallelPPOActor(DataParallelPPOActor):
                         off_policy_eos_mask = response_mask[off_policy_mask]
 
                         sft_loss = compute_sft_pure_loss(log_prob=off_policy_logprob,
-                                                        eos_mask=off_policy_eos_mask)
-                        
+                                                        eos_mask=off_policy_eos_mask,
+                                                        enable_phi_function=self.config.enable_phi_function)
+
 
                         from .mix_core_alg import compute_token_on_off_policy_srft_loss
                         loss_fn = compute_token_on_off_policy_srft_loss

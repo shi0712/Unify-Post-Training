@@ -89,6 +89,7 @@ actor_rollout_ref:
     loss_remove_token_mean: False
     loss_remove_clip: False
     sft_loss_coef: 1.0
+    enable_phi_function: False
     use_sft_multitask_loss: False
     offline_loss_type: "off_policy"
     srft_type: "paper"

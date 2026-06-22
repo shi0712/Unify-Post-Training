@@ -4,8 +4,19 @@ from collections import defaultdict
 
 import verl.utils.torch_functional as verl_F
 
-def compute_sft_pure_loss(log_prob, eos_mask):
+def phi_function(token_prob):
+    """
+    The phi function downweights token with extreme probability.
+    Feel free to modify this function.
+    """
+    return token_prob * (1 - token_prob)
+
+
+def compute_sft_pure_loss(log_prob, eos_mask, enable_phi_function=False):
     sft_losses = -log_prob
+    if enable_phi_function:
+        phi_weight = phi_function(log_prob).detach()
+        sft_losses = sft_losses * phi_weight
     sft_loss = verl_F.masked_mean(sft_losses, eos_mask)
     return sft_loss
 
