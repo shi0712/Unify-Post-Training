@@ -496,23 +496,29 @@ class MIXRayPPOTrainer(RayPPOTrainer):
                     gen_batch = batch.pop(batch_keys=['input_ids', 'attention_mask', 'position_ids', 'tgt_input_ids'])
                 gen_batch.meta_info['global_steps'] = self.global_steps
 
+                pure_sft = (self.config.actor_rollout_ref.actor.offline_loss_type == 'pure_sft')
+
                 with _timer('step', timing_raw):
                     # generate a batch
                     with _timer('gen', timing_raw):
                         if self.config.trainer.unify_strategy != 'no' and self.config.trainer.unify_strategy != 'soft':
                             gen_batch_output = self.actor_rollout_wg.generate_on_sequences(gen_batch, on_num=self.config.actor_rollout_ref.rollout.n_verify)
+                        elif pure_sft:
+                            gen_batch_output = self.actor_rollout_wg.generate_off_sequences(gen_batch)
                         else:
                             gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
-                    
+
                     # This code matches a prompt ID with its N responses.
                     batch.non_tensor_batch['uid'] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))],
                                                              dtype=object)
-                    
+
                     if self.config.trainer.unify_strategy != 'no' and self.config.trainer.unify_strategy != 'soft':
                         batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n_verify, interleave=True)
+                    elif pure_sft:
+                        batch = batch.repeat(repeat_times=1, interleave=True)
                     else:
                         batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
-                
+
                     batch = batch.union(gen_batch_output)
                     
                     if self.config.trainer.add_full_target_when_none:

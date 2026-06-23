@@ -132,7 +132,16 @@ class MIXDataParallelPPOActor(DataParallelPPOActor):
 
                     entropy, log_prob = self._forward_micro_batch(micro_batch=data, temperature=temperature)
 
-                    if self.config.offline_loss_type == "sft" or use_sft:
+                    if self.config.offline_loss_type == "pure_sft":
+                        from .mix_core_alg import compute_sft_pure_loss
+                        sft_loss = compute_sft_pure_loss(log_prob=log_prob,
+                                                        eos_mask=response_mask,
+                                                        enable_phi_function=self.config.enable_phi_function)
+                        pg_loss = sft_loss * self.config.sft_loss_coef
+                        pg_clipfrac = torch.tensor(0.0)
+                        ppo_kl = torch.tensor(0.0)
+
+                    elif self.config.offline_loss_type == "sft" or use_sft:
                         from .mix_core_alg import compute_sft_pure_loss
                         off_policy_mask = data['prefix_mask'].any(-1) # [No]
                         off_policy_logprob = log_prob[off_policy_mask]
