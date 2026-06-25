@@ -83,7 +83,7 @@ python3 -m verl.mix_src.main_mix_ppo \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=50 \
-    trainer.test_freq=10 \
+    trainer.test_freq=20 \
     trainer.unify_strategy="$UNIFY_STRATEGY" \
     actor_rollout_ref.actor.offline_loss_type="$OFFLINE_LOSS_TYPE" \
     actor_rollout_ref.actor.sft_loss_coef=$SFT_LOSS_COEF \
