@@ -9,7 +9,7 @@ def phi_function(token_prob):
     The phi function downweights token with extreme probability.
     Feel free to modify this function.
     """
-    return token_prob * (1 - token_prob)
+    return token_prob
 
 
 def compute_sft_pure_loss(log_prob, eos_mask, enable_phi_function=False):
