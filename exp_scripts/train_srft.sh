@@ -27,7 +27,7 @@ UNIFY_STRATEGY="no"
 OFFLINE_LOSS_TYPE="srft"
 SFT_LOSS_COEF=-0.5
 
-LR=1e-6
+LR=5e-6
 MODEL=Qwen2.5-Math-1.5B
 EXP_NAME="${DATE}_${UNIFY_STRATEGY}-${OFFLINE_LOSS_TYPE}_${MODEL}_lr@${LR}_${TIME_TAG}"
 MODEL_PATH=/mnt/inspurfs/evla2_t/pretrained/Qwen/Qwen2.5-Math-1.5B
