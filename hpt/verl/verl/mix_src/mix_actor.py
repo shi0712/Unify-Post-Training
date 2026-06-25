@@ -102,6 +102,8 @@ class MIXDataParallelPPOActor(DataParallelPPOActor):
         dataloader = batch.split(self.config.ppo_mini_batch_size)
 
         metrics = {}
+        if self.config.offline_loss_type == "srft":
+            self.sft_loss_coef = self.config.sft_loss_coef
         for _ in range(self.config.ppo_epochs):
             for batch_idx, data in enumerate(dataloader):
                 # split batch into micro_batches
@@ -359,72 +361,44 @@ class MIXDataParallelPPOActor(DataParallelPPOActor):
                         append_to_dict(metrics, data)
 
                     elif self.config.offline_loss_type == "srft":
-                        H_coef = verl_F.masked_mean(entropy, response_mask, axis=-1)
-                        H_coef = H_coef.detach()
-                        sft_coef = 0.5 * torch.exp(-1 * H_coef)
-                        on_coef = 0.1 * torch.exp(H_coef)
+                        from .mix_core_alg import compute_srft_official_loss
 
-                        from .mix_core_alg import compute_sft_pure_loss
-                        off_policy_mask = data['prefix_mask'].any(-1) # [No]
-                        off_policy_logprob = log_prob * (sft_coef.view(-1, 1))
-                        off_policy_logprob = off_policy_logprob[off_policy_mask]
-                        off_policy_eos_mask = response_mask[off_policy_mask]
-
-                        sft_loss = compute_sft_pure_loss(log_prob=off_policy_logprob,
-                                                        eos_mask=off_policy_eos_mask,
-                                                        enable_phi_function=self.config.enable_phi_function)
-
-
-                        from .mix_core_alg import compute_token_on_off_policy_srft_loss
-                        loss_fn = compute_token_on_off_policy_srft_loss
-
-                        token_level_scores = data['token_level_scores']
-                        correct_answer_mask = token_level_scores.sum(-1) == 1
-
-                        ret_dict = loss_fn(old_log_prob=old_log_prob, 
+                        ret_dict = compute_srft_official_loss(
+                            old_log_prob=old_log_prob,
                             log_prob=log_prob,
+                            entropy=entropy,
                             advantages=advantages,
                             eos_mask=response_mask,
                             cliprange=clip_ratio,
                             clip_upper_bound=self.config.clip_upper_bound,
                             prefix_mask=data['prefix_mask'],
-                            off_cliprange=self.config.off_policy_cliprange,
-                            on_coef=on_coef,
-                            correct_answer_mask=correct_answer_mask,
-                            srft_type=self.config.srft_type,
-                            off_normalize=self.config.off_policy_normalize,
                             off_max_clip=self.config.off_policy_max_clip if self.config.off_policy_max_clip != -1 else None,
                             off_min_clip=self.config.off_policy_min_clip if self.config.off_policy_min_clip != -1 else None,
                             all_max_clip=self.config.all_max_clip if self.config.all_max_clip != -1 else None,
                             off_policy_reshape=self.config.off_policy_reshape,
-                            off_policy_reshape_weight=self.config.off_policy_reshape_weight,
-                            off_policy_reshape_pow_exp=self.config.off_policy_reshape_pow_exp,
                             on_policy_reshape=self.config.on_policy_reshape,
-                            on_policy_reshape_weight=self.config.on_policy_reshape_weight,
-                            on_policy_reshape_pow_exp=self.config.on_policy_reshape_pow_exp,
                             target_probs=data['target_probs'] if 'target_probs' in data else None,
-                            loss_remove_token_mean=self.config.loss_remove_token_mean,
-                            loss_remove_clip=self.config.loss_remove_clip
                         )
                         pg_loss = ret_dict['pg_loss']
-                        if torch.isnan(sft_loss):
-                            print('sft_loss is nan, skipping sft_loss')
-                        else:
-                            pg_loss = sft_loss + pg_loss
+                        sft_loss = ret_dict['sft_loss']
+                        if not torch.isnan(sft_loss):
+                            pg_loss = pg_loss - sft_loss * self.sft_loss_coef
+                            self.sft_loss_coef = self.sft_loss_coef * 0.99
 
                         off_pg_loss = ret_dict['off_pg_loss']
-                        on_pg_loss = ret_dict['on_pg_loss']
+                        pos_loss = ret_dict['pos_loss']
+                        neg_loss = ret_dict['neg_loss']
                         off_pg_clipfrac = ret_dict['off_pg_clipfrac']
                         pg_clipfrac = ret_dict['on_pg_clipfrac']
                         ppo_kl = ret_dict['ppo_kl']
-                        
+
                         data = {
                             'actor/off_pg_loss': off_pg_loss.detach().item(),
-                            'actor/on_pg_loss': on_pg_loss.detach().item(),
+                            'actor/pos_loss': pos_loss.detach().item(),
+                            'actor/neg_loss': neg_loss.detach().item(),
+                            'actor/sft_loss': sft_loss.detach().item(),
                             'actor/off_pg_clipfrac': off_pg_clipfrac.detach().item(),
-                            'srft/H': H_coef.mean().item(),
-                            'srft/sft_coef': sft_coef.mean().item(),
-                            'srft/on_coef': on_coef.mean().item(),
+                            'srft/pos_adv_ratio': ret_dict['pos_adv_ratio'].detach().item(),
                         }
                         if 'off_policy_prob' in ret_dict:
                             data['actor/off_policy_prob'] = ret_dict['off_policy_prob'].detach().item()
@@ -437,7 +411,7 @@ class MIXDataParallelPPOActor(DataParallelPPOActor):
                         if 'off_ratio_min_clip_frac' in ret_dict:
                             data['actor/off_ratio_min_clip_frac'] = ret_dict['off_ratio_min_clip_frac'].detach().item()
                         append_to_dict(metrics, data)
-                    
+
                     else:
                         pg_loss, pg_clipfrac, ppo_kl = core_algos.compute_policy_loss(old_log_prob=old_log_prob, log_prob=log_prob,
                                                                                 advantages=advantages,

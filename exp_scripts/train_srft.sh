@@ -16,25 +16,25 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 source activate uft
 # ------------------------------------------------------------------------------------------------
 # NOTE: change to your root dir
-ROOT=../Unify-Post-Training
+ROOT=/mnt/petrelfs/languanzhou/sjw/Unify-Post-Training
 
-export SWANLAB_API_KEY='16xw3bqnlqJYli0MXham3'
-export SWANLAB_DESCRIPTION='SRFT baseline: entropy-weighted SFT + RL mixing'
+# export SWANLAB_API_KEY='16xw3bqnlqJYli0MXham3'
+# export SWANLAB_DESCRIPTION='SRFT baseline: entropy-weighted SFT + RL mixing'
+export WANDB_API_KEY='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'
 export WANDB_PROJECT="unified-ft"
 
 UNIFY_STRATEGY="no"
-SWITCH_GATE=0
-SWITCH_GATE_OFF=0
 OFFLINE_LOSS_TYPE="srft"
+SFT_LOSS_COEF=-0.5
 
 LR=1e-6
 MODEL=Qwen2.5-Math-1.5B
 EXP_NAME="${DATE}_${UNIFY_STRATEGY}-${OFFLINE_LOSS_TYPE}_${MODEL}_lr@${LR}_${TIME_TAG}"
-MODEL_PATH=$ROOT/models/$MODEL
+MODEL_PATH=/mnt/inspurfs/evla2_t/pretrained/Qwen/Qwen2.5-Math-1.5B
 DATA_DIR=$ROOT/data/
 
 cd $ROOT/hpt/verl/
-mkdir -p $ROOT/checkpoints/$EXP_NAME
+mkdir -p /mnt/inspurfs/evla2_t/languanzhou/ckpts/$EXP_NAME
 
 TRAIN_FILE=${TRAIN_FILE:-"${DATA_DIR}/openr1.parquet"}
 TEST_FILE=${TEST_FILE:-["${DATA_DIR}/AIME24/test.parquet","${DATA_DIR}/AIME25/test.parquet","${DATA_DIR}/AMC23/test.parquet","${DATA_DIR}/MATH-500/test.parquet","${DATA_DIR}/Minerva/test.parquet","${DATA_DIR}/Olympiad-Bench/test.parquet"]}
@@ -76,7 +76,7 @@ python3 -m verl.mix_src.main_mix_ppo \
     algorithm.kl_ctrl.kl_coef=0.000 \
     actor_rollout_ref.actor.entropy_coeff=0.001 \
     trainer.critic_warmup=0 \
-    trainer.logger=['console','swanlab'] \
+    trainer.logger=['console','wandb'] \
     trainer.project_name="$WANDB_PROJECT" \
     trainer.experiment_name="$EXP_NAME" \
     +trainer.val_before_train=True \
@@ -85,10 +85,8 @@ python3 -m verl.mix_src.main_mix_ppo \
     trainer.save_freq=50 \
     trainer.test_freq=10 \
     trainer.unify_strategy="$UNIFY_STRATEGY" \
-    trainer.switch_gate="$SWITCH_GATE" \
-    trainer.switch_gate_off=$SWITCH_GATE_OFF \
     actor_rollout_ref.actor.offline_loss_type="$OFFLINE_LOSS_TYPE" \
-    actor_rollout_ref.actor.enable_phi_function=False \
+    actor_rollout_ref.actor.sft_loss_coef=$SFT_LOSS_COEF \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.use_sft_prefix_reward=False \
     actor_rollout_ref.rollout.prefix_share_across_samples=False \

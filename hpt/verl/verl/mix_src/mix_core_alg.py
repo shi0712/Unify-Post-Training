@@ -15,7 +15,7 @@ def phi_function(token_prob):
 def compute_sft_pure_loss(log_prob, eos_mask, enable_phi_function=False):
     sft_losses = -log_prob
     if enable_phi_function:
-        phi_weight = phi_function(log_prob).detach()
+        phi_weight = phi_function(torch.exp(log_prob)).detach()
         sft_losses = sft_losses * phi_weight
     sft_loss = verl_F.masked_mean(sft_losses, eos_mask)
     return sft_loss
@@ -903,5 +903,146 @@ def compute_token_on_off_policy_loss_weight(
     }
 
 
+def compute_srft_official_loss(
+    old_log_prob,
+    log_prob,
+    entropy,
+    advantages,
+    eos_mask,
+    cliprange,
+    clip_upper_bound,
+    prefix_mask,
+    off_max_clip=None,
+    off_min_clip=None,
+    all_max_clip=None,
+    off_policy_reshape="no_reshape",
+    on_policy_reshape="no_reshape",
+    target_probs=None,
+):
+    """Official SRFT loss from https://github.com/zwhe99/DeepMath
 
+    Key design:
+    - On-policy: split by advantage sign
+        - Positive advantage: entropy-weighted PG loss (0.1 * exp(H) * pos_loss)
+        - Negative advantage: standard PG loss
+    - Off-policy (SFT): entropy-weighted CE loss on correct answer tokens
+    - No PPO clip
+    """
+    negative_approx_kl = log_prob - old_log_prob
+    ppo_kl = verl_F.masked_mean(-negative_approx_kl, eos_mask)
 
+    if on_policy_reshape == "no_reshape":
+        ratio = torch.exp(negative_approx_kl)
+    elif on_policy_reshape == "p_div_p_0.1":
+        prob = torch.exp(log_prob)
+        old_prob = torch.exp(old_log_prob)
+        f_prob = prob / (prob + 0.1)
+        f_old_prob = old_prob / (old_prob + 0.1)
+        ratio = f_prob / f_old_prob
+    else:
+        raise ValueError(f"Invalid on_policy_reshape: {on_policy_reshape}")
+
+    # Split on-policy calculation based on advantage sign
+    pos_adv_mask = (advantages > 0) & (~prefix_mask) & eos_mask
+    neg_adv_mask = (advantages <= 0) & (~prefix_mask) & eos_mask
+
+    on_pg_clipfrac = torch.tensor(0.0)
+    on_policy_losses = -advantages * ratio
+
+    pos_loss = verl_F.masked_mean(on_policy_losses, pos_adv_mask)
+    if pos_loss.isnan().item() is True:
+        pos_loss = torch.tensor(0.0)
+
+    neg_loss = verl_F.masked_mean(on_policy_losses, neg_adv_mask)
+    if neg_loss.isnan().item() is True:
+        neg_loss = torch.tensor(0.0)
+
+    # compute off-policy loss
+    if target_probs is None:
+        off_ratio = torch.exp(log_prob)
+        if off_policy_reshape == "no_reshape":
+            pass
+        elif off_policy_reshape == "p_div_p_0.1":
+            off_ratio = off_ratio / (off_ratio + 0.1)
+        else:
+            raise ValueError(f"Invalid off_policy_reshape: {off_policy_reshape}")
+    else:
+        assert target_probs.shape == log_prob.shape
+        off_ratio = torch.exp(log_prob) / (target_probs + 1e-6)
+        off_ratio = off_ratio * prefix_mask
+
+    # clip off-policy ratio
+    off_ratio_max_clip_frac = torch.tensor(0.0)
+    off_ratio_min_clip_frac = torch.tensor(0.0)
+    if off_max_clip is not None:
+        off_ratio = torch.clamp(off_ratio, max=off_max_clip)
+        off_ratio_max_clip_frac = verl_F.masked_mean(
+            (off_ratio == off_max_clip).float(), prefix_mask * eos_mask)
+    if off_min_clip is not None:
+        off_ratio = torch.clamp(off_ratio, min=off_min_clip)
+        off_ratio_min_clip_frac = verl_F.masked_mean(
+            (off_ratio == off_min_clip).float(), prefix_mask * eos_mask)
+
+    off_ratio_mean = verl_F.masked_mean(off_ratio, prefix_mask * eos_mask)
+    if off_ratio_mean.isnan().any().item():
+        off_ratio_mean = torch.tensor(0.0)
+
+    off_pg_losses = -advantages * off_ratio
+    off_pg_loss = (off_pg_losses * (prefix_mask * eos_mask)).sum() / eos_mask.shape[-1]
+    if off_pg_loss.isnan().item() is True:
+        off_pg_loss = torch.tensor(0.0)
+    off_pg_clipfrac = torch.tensor(0.0)
+
+    # Combine losses
+    prefix_mask_f = prefix_mask.float()
+
+    # Entropy-weighted on-policy: positive advantages get entropy bonus
+    pos_entropy_exp_coeff = 0.1 * (entropy).exp().detach()
+    on_policy_losses = (
+        pos_entropy_exp_coeff * pos_loss * pos_adv_mask.float()
+        + neg_loss * neg_adv_mask.float()
+    )
+
+    pg_losses = off_pg_losses * prefix_mask_f + on_policy_losses * (1 - prefix_mask_f)
+
+    if all_max_clip is not None:
+        p_on = torch.exp(log_prob)
+        p_on_mask = (p_on <= all_max_clip).float()
+        eos_mask = eos_mask * p_on_mask
+        pg_losses = pg_losses * p_on_mask
+
+    pg_loss = (pg_losses * eos_mask).sum() / eos_mask.shape[-1]
+
+    # SFT loss: entropy-weighted CE on correct answer (off-policy) tokens
+    entropy_exp_coeff = entropy.exp().detach()
+    sft_loss = ((-entropy_exp_coeff * log_prob) * (prefix_mask_f * eos_mask)).sum() / eos_mask.shape[-1]
+    if sft_loss.isnan().item() is True:
+        sft_loss = torch.tensor(0.0)
+
+    # log on/off probs
+    off_policy_probs = torch.exp(log_prob)
+    off_policy_prob = verl_F.masked_mean(off_policy_probs, prefix_mask_f * eos_mask)
+    if off_policy_prob.isnan().item() is True:
+        off_policy_prob = torch.tensor(0.0)
+    on_policy_probs = torch.exp(old_log_prob)
+    on_policy_prob = verl_F.masked_mean(on_policy_probs, (1.0 - prefix_mask_f) * eos_mask)
+    if on_policy_prob.isnan().item() is True:
+        on_policy_prob = torch.tensor(0.0)
+
+    return {
+        "pg_loss": pg_loss,
+        "off_pg_loss": off_pg_loss,
+        "pos_loss": pos_loss,
+        "neg_loss": neg_loss,
+        "sft_loss": sft_loss,
+        "off_pg_clipfrac": off_pg_clipfrac,
+        "on_pg_clipfrac": on_pg_clipfrac,
+        "ppo_kl": ppo_kl,
+        "off_policy_prob": off_policy_prob,
+        "on_policy_prob": on_policy_prob,
+        "off_ratio_mean": off_ratio_mean,
+        "off_ratio_max_clip_frac": off_ratio_max_clip_frac,
+        "off_ratio_min_clip_frac": off_ratio_min_clip_frac,
+        "pos_adv_ratio": verl_F.masked_mean(
+            pos_adv_mask.float(), (1.0 - prefix_mask_f) * eos_mask),
+    }
