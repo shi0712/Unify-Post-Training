@@ -107,4 +107,4 @@ python3 -m verl.mix_src.main_mix_ppo \
     data.shuffle=True \
     trainer.default_hdfs_dir=null \
     trainer.total_training_steps=500 \
-    trainer.default_local_dir=$ROOT/checkpoints/$EXP_NAME
+    trainer.default_local_dir=/mnt/inspurfs/evla2_t/languanzhou/ckpts/$EXP_NAME
